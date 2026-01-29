@@ -1,4 +1,4 @@
-import os, subprocess as sp, xarray as xr, numpy as np, dask, numba
+from hapy_common import *
 #---------------------------------------------------------------------------------------------------
 def print_stat(x,name='(no name)',unit='',fmt='f',stat='naxh',indent=' '*2,compact=True):
    """ Print min, avg, max, and std deviation of input """
