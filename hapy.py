@@ -1,5 +1,5 @@
 from hapy_common import *
-from hapy_constants import *
+import hapy_constants as constants
 from hapy_stat import *
 from hapy_mach import *
 from hapy_sphere import *
@@ -24,39 +24,37 @@ def trim_png(fig_file,verbose=True,root=None):
 def print_time_length(time,indent='    ',print_msg=True,color=None,
                       print_span=True, print_length=True):
    """ print length of time """
-   if len(time)>1:
-      max_dy_for_mn = np.timedelta64(60, 'D')
-      max_mn_for_yr = np.timedelta64(12, 'M')
-      # calculate time delta
-      dt = time[1] - time[0]
-      # calculate length of period spanned by coordinate
-      time_span_dy = ( time[-1] - time[0] + dt ).values.astype('timedelta64[D]') 
-      time_span_mn = time_span_dy.astype('timedelta64[M]') + 1
-      time_span_yr = time_span_mn.astype('timedelta64[Y]') + 1
-      # calculate the actual length of the data (considering gaps with no data)
-      time_leng_dy = (len(time) * dt).values.astype('timedelta64[D]') 
-      time_leng_mn = time_leng_dy.astype('timedelta64[M]') + 1
-      time_leng_yr = time_leng_mn.astype('timedelta64[Y]') + 1
-      # build a message to be printed
-      msg1 = indent+f'Time span   : {str(time_span_dy)}'
-      msg2 = indent+f'Time length : {str(time_leng_dy)}'
-      if time_span_dy > max_dy_for_mn : msg1 = msg1+f'  /  {time_span_mn}'
-      if time_leng_dy > max_dy_for_mn : msg2 = msg2+f'  /  {time_leng_mn}'
-      if time_span_mn > max_mn_for_yr : msg1 = msg1+f'  /  {time_span_yr}'
-      if time_leng_mn > max_mn_for_yr : msg2 = msg2+f'  /  {time_leng_yr}'
-      # add color if requested
-      if color is not None:
-         msg1 = f'{color}{msg1}{tcolor.ENDC}'
-         msg2 = f'{color}{msg2}{tcolor.ENDC}'
-      # print the formatted message
-      if print_msg:
-         if print_span:    print(msg1)
-         if print_length:  print(msg2)
-         return
-      else:
-         return msg
-
-
+   if len(time)<=1: return
+   max_dy_for_mn = np.timedelta64(60, 'D')
+   max_mn_for_yr = np.timedelta64(12, 'M')
+   # calculate time delta
+   dt = time[1] - time[0]
+   # calculate length of period spanned by coordinate
+   time_span_dy = ( time[-1] - time[0] + dt ).values.astype('timedelta64[D]') 
+   time_span_mn = time_span_dy.astype('timedelta64[M]') + 1
+   time_span_yr = time_span_mn.astype('timedelta64[Y]') + 1
+   # calculate the actual length of the data (considering gaps with no data)
+   time_leng_dy = (len(time) * dt).values.astype('timedelta64[D]') 
+   time_leng_mn = time_leng_dy.astype('timedelta64[M]') + 1
+   time_leng_yr = time_leng_mn.astype('timedelta64[Y]') + 1
+   # build a message to be printed
+   msg1 = indent+f'Time span   : {str(time_span_dy)}'
+   msg2 = indent+f'Time length : {str(time_leng_dy)}'
+   if time_span_dy > max_dy_for_mn : msg1 = msg1+f'  /  {time_span_mn}'
+   if time_leng_dy > max_dy_for_mn : msg2 = msg2+f'  /  {time_leng_mn}'
+   if time_span_mn > max_mn_for_yr : msg1 = msg1+f'  /  {time_span_yr}'
+   if time_leng_mn > max_mn_for_yr : msg2 = msg2+f'  /  {time_leng_yr}'
+   # add color if requested
+   if color is not None:
+      msg1 = f'{color}{msg1}{tcolor.ENDC}'
+      msg2 = f'{color}{msg2}{tcolor.ENDC}'
+   # print the formatted message
+   if print_msg:
+      if print_span:    print(msg1)
+      if print_length:  print(msg2)
+      return
+   else:
+      return msg
 
 #---------------------------------------------------------------------------------------------------
 # Vertical Integration routines
