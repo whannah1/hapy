@@ -6,6 +6,7 @@ from hapy_sphere import *
 from hapy_sat import *
 from hapy_filter import *
 from hapy_bin import *
+from hapy_interp import *
 #---------------------------------------------------------------------------------------------------
 # misc methods that aren't easily classified
 #---------------------------------------------------------------------------------------------------
