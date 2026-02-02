@@ -1,76 +1,102 @@
 from hapy_common import *
 #---------------------------------------------------------------------------------------------------
+def lon_to_180(lon):
+    return ((lon + 180.0) % 360.0) - 180.0
+#---------------------------------------------------------------------------------------------------
+@xr.register_dataarray_accessor('lon_to_180')
+class LongitudeAccessor:
+    def __init__(self, xarray_obj): self._obj = xarray_obj
+    def __call__(self, lon_dim='lon',sort_dim=False):
+        # Check if this is a xarray or uxarray DataArray
+        module_name = type(self._obj).__module__.split('.')[0]
+        if module_name not in ['xarray', 'uxarray']:
+            raise TypeError(f'lon_to_180 only works with xarray or uxarray DataArrays, '
+                          f'got {type(self._obj).__name__} from {module_name}')
+        # Check if the longitude dimension exists
+        if lon_dim in self._obj.coords:
+            # Transform the longitude coordinate
+            new_lon = ((self._obj[lon_dim] + 180.0) % 360.0) - 180.0
+            # Assign the new coordinate and sort by it
+            result = self._obj.assign_coords({lon_dim: new_lon})
+            # sort might be needed for rectilinear data
+            if sort_dim: result = result.sortby(lon_dim)
+            return result
+        else:
+            print(f'WARNING: Dimension \'{lon_dim}\' not found in DataArray.')
+            print(f'Available dimensions: {list(self._obj.dims)}')
+            return
+#---------------------------------------------------------------------------------------------------
 # Spherical Calculation routines
 #---------------------------------------------------------------------------------------------------
 # calculate radius of Earth assuming oblate spheroid
 def earth_radius(lat):
-   # lat: vector or latitudes in degrees  
-   # r: vector of radius in meters
-   # WGS84: https://earth-info.nga.mil/GandG/publications/tr8350.2/tr8350.2-a/Chapter%203.pdf
-   from numpy import deg2rad, sin, cos
+    # lat: vector or latitudes in degrees  
+    # r: vector of radius in meters
+    # WGS84: https://earth-info.nga.mil/GandG/publications/tr8350.2/tr8350.2-a/Chapter%203.pdf
+    from numpy import deg2rad, sin, cos
 
-   # define oblate spheroid from WGS84
-   a = 6378137
-   b = 6356752.3142
-   e2 = 1 - (b**2/a**2)
+    # define oblate spheroid from WGS84
+    a = 6378137
+    b = 6356752.3142
+    e2 = 1 - (b**2/a**2)
 
-   # convert from geodecic to geocentric
-   # see equation 3-110 in WGS84
-   lat = deg2rad(lat)
-   lat_gc = np.arctan( (1-e2)*np.tan(lat) )
+    # convert from geodecic to geocentric
+    # see equation 3-110 in WGS84
+    lat = deg2rad(lat)
+    lat_gc = np.arctan( (1-e2)*np.tan(lat) )
 
-   # radius equation
-   # see equation 3-107 in WGS84
-   r = ( (a * (1 - e2)**0.5) / (1 - (e2 * np.cos(lat_gc)**2))**0.5 )
+    # radius equation
+    # see equation 3-107 in WGS84
+    r = ( (a * (1 - e2)**0.5) / (1 - (e2 * np.cos(lat_gc)**2))**0.5 )
 
-   return r
+    return r
 #---------------------------------------------------------------------------------------------------
 # find nearest neighbors
 @numba.njit()
 def find_nearest_neighbors_on_sphere_numba(lat,lon,num_neighbors,neighbor_id) :
-   # Note - input should be radians
-   ncol = len(lat)
-   for n in range(0,ncol) :
-      cos_dist = np.sin(lat[n])*np.sin(lat[:]) + \
-                 np.cos(lat[n])*np.cos(lat[:]) * np.cos( lon[n]-lon[:] )
-      for nn in range(0,ncol+1) :
-         if cos_dist[nn] >  1.0 : cos_dist[nn] = 1.0
-         if cos_dist[nn] < -1.0 : cos_dist[nn] = -1.0
-      dist = np.arccos( cos_dist )
-      p_vector = np.argsort(dist,kind='mergesort')
-      neighbor_id[n,0:num_neighbors] = p_vector[1:num_neighbors+1]
+    # Note - input should be radians
+    ncol = len(lat)
+    for n in range(0,ncol) :
+        cos_dist = np.sin(lat[n])*np.sin(lat[:]) + \
+                      np.cos(lat[n])*np.cos(lat[:]) * np.cos( lon[n]-lon[:] )
+        for nn in range(0,ncol+1) :
+            if cos_dist[nn] >  1.0 : cos_dist[nn] = 1.0
+            if cos_dist[nn] < -1.0 : cos_dist[nn] = -1.0
+        dist = np.arccos( cos_dist )
+        p_vector = np.argsort(dist,kind='mergesort')
+        neighbor_id[n,0:num_neighbors] = p_vector[1:num_neighbors+1]
 #---------------------------------------------------------------------------------------------------
 def find_nearest_neighbors_on_sphere(lat,lon,num_neighbors,return_sorted=False) :
-   # Note - input should be degrees
-   # return_sorted = False
-   ncol = len(lat)
-   neighbor_id    = np.empty([num_neighbors+1,ncol], dtype=np.int32)
-   neighbor_dist  = np.empty([num_neighbors+1,ncol], dtype=np.float32)
-   for n in range(0,ncol):
-      dist = calc_great_circle_distance(lat[n],lat[:],lon[n],lon[:])
-      if return_sorted:
-         p_vector = np.argsort(dist,kind='mergesort')
-         neighbor_id[:,n]   = p_vector[0:num_neighbors+1]     # include current point
-         neighbor_dist[:,n] = dist[p_vector[0:num_neighbors+1]]
-      else:
-         p_vector = np.argpartition(dist[1:],num_neighbors)+1
-         neighbor_id[:,n] = p_vector[0:num_neighbors]
-   # return neighbor_id
-   neighbor_ds = xr.Dataset()
-   neighbor_ds['neighbor_id']   = (('ncol','neighbors'), neighbor_id)
-   neighbor_ds['neighbor_dist'] = (('ncol','neighbors'), neighbor_dist)
-   return neighbor_ds
+    # Note - input should be degrees
+    # return_sorted = False
+    ncol = len(lat)
+    neighbor_id    = np.empty([num_neighbors+1,ncol], dtype=np.int32)
+    neighbor_dist  = np.empty([num_neighbors+1,ncol], dtype=np.float32)
+    for n in range(0,ncol):
+        dist = calc_great_circle_distance(lat[n],lat[:],lon[n],lon[:])
+        if return_sorted:
+            p_vector = np.argsort(dist,kind='mergesort')
+            neighbor_id[:,n]   = p_vector[0:num_neighbors+1]     # include current point
+            neighbor_dist[:,n] = dist[p_vector[0:num_neighbors+1]]
+        else:
+            p_vector = np.argpartition(dist[1:],num_neighbors)+1
+            neighbor_id[:,n] = p_vector[0:num_neighbors]
+    # return neighbor_id
+    neighbor_ds = xr.Dataset()
+    neighbor_ds['neighbor_id']   = (('ncol','neighbors'), neighbor_id)
+    neighbor_ds['neighbor_dist'] = (('ncol','neighbors'), neighbor_dist)
+    return neighbor_ds
 #---------------------------------------------------------------------------------------------------
 # input should be in degrees
 def calc_great_circle_distance(lat1,lat2,lon1,lon2):
-   dlon = lon2 - lon1
-   cos_dist = np.sin(lat1*deg_to_rad)*np.sin(lat2*deg_to_rad) + \
-              np.cos(lat1*deg_to_rad)*np.cos(lat2*deg_to_rad)*np.cos(dlon*deg_to_rad)
-   # print( str(cos_dist.min()) +"   "+ str(cos_dist.max()) )
-   cos_dist = np.where(cos_dist> 1.0, 1.0,cos_dist)
-   cos_dist = np.where(cos_dist<-1.0,-1.0,cos_dist)
-   dist = np.arccos( cos_dist )
-   return dist
+    dlon = lon2 - lon1
+    cos_dist = np.sin(lat1*deg_to_rad)*np.sin(lat2*deg_to_rad) + \
+                  np.cos(lat1*deg_to_rad)*np.cos(lat2*deg_to_rad)*np.cos(dlon*deg_to_rad)
+    # print( str(cos_dist.min()) +"   "+ str(cos_dist.max()) )
+    cos_dist = np.where(cos_dist> 1.0, 1.0,cos_dist)
+    cos_dist = np.where(cos_dist<-1.0,-1.0,cos_dist)
+    dist = np.arccos( cos_dist )
+    return dist
 #---------------------------------------------------------------------------------------------------
 # @numba.njit
 # def calc_great_circle_bearing(lat1_in,lat2_in,lon1_in,lon2_in):
