@@ -1,4 +1,10 @@
-import os, subprocess as sp, xarray as xr, numpy as np, dask, numba
+import os
+import subprocess as sp
+import xarray as xr
+import numpy as np
+import dask
+import numba
+from scipy.interpolate import interp1d
 #---------------------------------------------------------------------------------------------------
 # terminal color class
 class tclr:

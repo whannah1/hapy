@@ -7,6 +7,7 @@ from hapy_sat import *
 from hapy_filter import *
 from hapy_bin import *
 from hapy_interp import *
+from hapy_vinth2p import *
 #---------------------------------------------------------------------------------------------------
 # misc methods that aren't easily classified
 #---------------------------------------------------------------------------------------------------
