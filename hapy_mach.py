@@ -28,6 +28,7 @@ def get_host(verbose=False):
     if 'summit'     in host : host = 'olcf'
     if host=='ccs.ornl.gov' : host = 'olcf'   # rhea
     if host=='olcf.ornl.gov': host = 'olcf'   # andes
-    if host=='lcrc.anl.gov' : host = 'anl'    # chrysalis
+    if host=='lcrc.anl.gov' : host = 'lcrc'    # chrysalis
+    if 'aurora.alcf' in host: host = 'alcf'
     return host
 #---------------------------------------------------------------------------------------------------
