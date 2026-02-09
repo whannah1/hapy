@@ -8,6 +8,7 @@ from hapy_filter import *
 from hapy_bin import *
 from hapy_interp import *
 from hapy_vinth2p import *
+from hapy_raster import *
 #---------------------------------------------------------------------------------------------------
 # misc methods that aren't easily classified
 #---------------------------------------------------------------------------------------------------
@@ -58,6 +59,101 @@ def print_time_length(time,indent='    ',print_msg=True,color=None,
     else:
         return msg
 
+#---------------------------------------------------------------------------------------------------
+def check_invalid_values(uxds, variables=None, check_nan=True, check_inf=True, 
+                        check_range=None, verbose=True):
+    """
+    Check for invalid values in a uxarray dataset.
+    
+    Parameters:
+    -----------
+    uxds : uxarray.UxDataset
+        The uxarray dataset to check
+    variables : list, optional
+        List of variable names to check. If None, checks all data variables
+    check_nan : bool, default=True
+        Check for NaN values
+    check_inf : bool, default=True
+        Check for infinite values
+    check_range : dict, optional
+        Dictionary of {variable_name: (min, max)} for valid ranges
+    verbose : bool, default=True
+        Print detailed information about invalid values found
+        
+    Returns:
+    --------
+    dict : Summary of invalid values found for each variable
+    """
+    
+    if variables is None:
+        variables = list(uxds.data_vars)
+    
+    results = {}
+    
+    for var in variables:
+        if var not in uxds.data_vars:
+            print(f"Warning: Variable '{var}' not found in dataset")
+            continue
+            
+        data = uxds[var]
+        invalid_info = {
+            'total_values': data.size,
+            'nan_count': 0,
+            'inf_count': 0,
+            'out_of_range_count': 0,
+            'valid_count': 0
+        }
+        
+        # Check for NaN
+        if check_nan:
+            nan_mask = np.isnan(data.values)
+            invalid_info['nan_count'] = int(np.sum(nan_mask))
+        
+        # Check for inf
+        if check_inf:
+            inf_mask = np.isinf(data.values)
+            invalid_info['inf_count'] = int(np.sum(inf_mask))
+        
+        # Check valid range
+        if check_range and var in check_range:
+            min_val, max_val = check_range[var]
+            finite_data = data.values[np.isfinite(data.values)]
+            out_of_range = np.sum((finite_data < min_val) | (finite_data > max_val))
+            invalid_info['out_of_range_count'] = int(out_of_range)
+            invalid_info['specified_range'] = (min_val, max_val)
+            if len(finite_data) > 0:
+                invalid_info['actual_range'] = (float(np.min(finite_data)), 
+                                               float(np.max(finite_data)))
+        
+        # Calculate valid count
+        total_invalid = (invalid_info['nan_count'] + 
+                        invalid_info['inf_count'] + 
+                        invalid_info['out_of_range_count'])
+        invalid_info['valid_count'] = invalid_info['total_values'] - total_invalid
+        invalid_info['valid_percentage'] = (invalid_info['valid_count'] / 
+                                           invalid_info['total_values'] * 100)
+        
+        results[var] = invalid_info
+        
+        # Print verbose output
+        if verbose:
+            print(f"\n{'='*60}")
+            print(f"Variable: {var}")
+            print(f"{'='*60}")
+            print(f"Total values: {invalid_info['total_values']:,}")
+            print(f"Valid values: {invalid_info['valid_count']:,} "
+                  f"({invalid_info['valid_percentage']:.2f}%)")
+            
+            if invalid_info['nan_count'] > 0:
+                print(f"NaN values: {invalid_info['nan_count']:,}")
+            if invalid_info['inf_count'] > 0:
+                print(f"Inf values: {invalid_info['inf_count']:,}")
+            if invalid_info['out_of_range_count'] > 0:
+                print(f"Out of range: {invalid_info['out_of_range_count']:,}")
+                print(f"  Specified range: {invalid_info['specified_range']}")
+                print(f"  Actual range: {invalid_info['actual_range']}")
+    
+    return results
 #---------------------------------------------------------------------------------------------------
 # Vertical Integration routines
 #---------------------------------------------------------------------------------------------------
