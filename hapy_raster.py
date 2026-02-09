@@ -27,7 +27,152 @@ from scipy.spatial import cKDTree
 import cartopy.crs as ccrs
 
 
-def to_raster(data, grid, ax, pixel_ratio=1.0, method='nearest'):
+def _haversine_distance_matrix(lon1, lat1, lon2, lat2):
+    """
+    Calculate great circle distances using the Haversine formula.
+    
+    This properly handles the spherical geometry of Earth, including
+    longitude wrapping and polar regions.
+    
+    Parameters
+    ----------
+    lon1, lat1 : array_like
+        Coordinates of first points (in degrees)
+    lon2, lat2 : array_like
+        Coordinates of second points (in degrees)
+    
+    Returns
+    -------
+    distances : ndarray
+        Great circle distances in degrees
+    """
+    # Convert to radians
+    lon1_rad = np.radians(lon1)
+    lat1_rad = np.radians(lat1)
+    lon2_rad = np.radians(lon2)
+    lat2_rad = np.radians(lat2)
+    
+    # Haversine formula
+    dlat = lat2_rad - lat1_rad
+    dlon = lon2_rad - lon1_rad
+    
+    a = np.sin(dlat/2)**2 + np.cos(lat1_rad) * np.cos(lat2_rad) * np.sin(dlon/2)**2
+    c = 2 * np.arcsin(np.sqrt(np.clip(a, 0, 1)))
+    
+    # Return in degrees
+    return np.degrees(c)
+
+
+class SphericalKDTree:
+    """
+    A KDTree-like class that uses spherical distances for polar regions.
+    
+    For regions with |latitude| > 60°, this uses a more expensive but accurate
+    great-circle distance calculation. For other regions, it falls back to
+    the faster Cartesian KDTree.
+    
+    Optimized to batch-process polar queries for better performance.
+    """
+    
+    def __init__(self, lon, lat, polar_threshold=60.0):
+        self.lon = lon
+        self.lat = lat
+        self.polar_threshold = polar_threshold
+        
+        # Precompute for spherical calculations
+        self.lon_rad = np.radians(lon)
+        self.lat_rad = np.radians(lat)
+        self.cos_lat = np.cos(self.lat_rad)
+        self.sin_lat = np.sin(self.lat_rad)
+        
+        # Build Cartesian KDTree for non-polar queries
+        points = np.column_stack([lon, lat])
+        self.tree = cKDTree(points)
+    
+    def _haversine_batch(self, query_lon_rad, query_lat_rad, query_cos_lat, query_sin_lat):
+        """
+        Vectorized haversine distance for multiple query points.
+        Returns distances in degrees.
+        """
+        # Broadcasting: query points (N,) vs grid points (M,)
+        # Result shape will be (N, M)
+        dlon = self.lon_rad[np.newaxis, :] - query_lon_rad[:, np.newaxis]
+        dlat = self.lat_rad[np.newaxis, :] - query_lat_rad[:, np.newaxis]
+        
+        a = (np.sin(dlat/2)**2 + 
+             query_cos_lat[:, np.newaxis] * self.cos_lat[np.newaxis, :] * 
+             np.sin(dlon/2)**2)
+        c = 2 * np.arcsin(np.sqrt(np.clip(a, 0, 1)))
+        
+        return np.degrees(c)
+    
+    def query(self, query_lon, query_lat, k=1):
+        """
+        Query the tree for nearest neighbors.
+        
+        Uses spherical distances for polar queries, Cartesian for others.
+        """
+        query_lon = np.atleast_1d(query_lon)
+        query_lat = np.atleast_1d(query_lat)
+        n_queries = len(query_lon)
+        
+        # Determine if query points are in polar regions
+        is_polar = np.abs(query_lat) > self.polar_threshold
+        n_polar = np.sum(is_polar)
+        
+        # Initialize outputs
+        if k == 1:
+            distances = np.zeros(n_queries)
+            indices = np.zeros(n_queries, dtype=int)
+        else:
+            distances = np.zeros((n_queries, k))
+            indices = np.zeros((n_queries, k), dtype=int)
+        
+        # Handle non-polar points with fast KDTree
+        if np.any(~is_polar):
+            non_polar_points = np.column_stack([query_lon[~is_polar], query_lat[~is_polar]])
+            d, i = self.tree.query(non_polar_points, k=k)
+            if k == 1:
+                distances[~is_polar] = d
+                indices[~is_polar] = i
+            else:
+                distances[~is_polar] = d
+                indices[~is_polar] = i
+        
+        # Handle polar points with vectorized spherical distances
+        if n_polar > 0:
+            polar_lon = query_lon[is_polar]
+            polar_lat = query_lat[is_polar]
+            
+            # Precompute for all polar queries
+            polar_lon_rad = np.radians(polar_lon)
+            polar_lat_rad = np.radians(polar_lat)
+            polar_cos_lat = np.cos(polar_lat_rad)
+            polar_sin_lat = np.sin(polar_lat_rad)
+            
+            # Batch compute distances: shape (n_polar, n_grid_points)
+            all_dists = self._haversine_batch(polar_lon_rad, polar_lat_rad, 
+                                             polar_cos_lat, polar_sin_lat)
+            
+            # Find k nearest for each query
+            if k == 1:
+                nearest_indices = np.argmin(all_dists, axis=1)
+                distances[is_polar] = all_dists[np.arange(n_polar), nearest_indices]
+                indices[is_polar] = nearest_indices
+            else:
+                # Use argpartition for efficiency
+                nearest_indices = np.argpartition(all_dists, k-1, axis=1)[:, :k]
+                # Sort the k nearest
+                for i in range(n_polar):
+                    sorted_k = nearest_indices[i][np.argsort(all_dists[i, nearest_indices[i]])]
+                    indices[is_polar][i] = sorted_k
+                    distances[is_polar][i] = all_dists[i, sorted_k]
+        
+        return distances, indices
+
+
+def to_raster(data, grid, ax, pixel_ratio=1.0, method='nearest', 
+              use_spherical=True, polar_threshold=60.0):
     """
     Convert unstructured grid data to a raster array for plotting.
     
@@ -76,6 +221,16 @@ def to_raster(data, grid, ax, pixel_ratio=1.0, method='nearest'):
         - 'nearest': Nearest neighbor (fastest, default)
         - 'linear': Linear interpolation using nearest neighbors (slower)
         Default is 'nearest'.
+    
+    use_spherical : bool, optional
+        If True (default), uses spherical distance calculations for polar regions
+        (|latitude| > polar_threshold). This is more accurate but slower for polar
+        plots. If False, uses fast Cartesian distances everywhere (may show
+        artifacts near poles). Default is True.
+    
+    polar_threshold : float, optional
+        Latitude threshold (in degrees) above which to use spherical distances.
+        Only used if use_spherical=True. Default is 60.0 degrees.
     
     Returns
     -------
@@ -149,11 +304,11 @@ def to_raster(data, grid, ax, pixel_ratio=1.0, method='nearest'):
     
     # Compute data if it's a Dask array
     if hasattr(data, 'chunks') and data.chunks is not None:
-        print("hapy.to_raster - Computing Dask array...")
+        print("Computing Dask array...")
         values = data.compute().values
     else:
         values = data.values
-    
+    print('done.')
     # Normalize longitude to [-180, 180]
     lon = np.where(lon > 180, lon - 360, lon)
     
@@ -214,48 +369,81 @@ def to_raster(data, grid, ax, pixel_ratio=1.0, method='nearest'):
     lon_query = np.where(lon_query > 180, lon_query - 360, lon_query)
     lon_query = np.where(lon_query < -180, lon_query + 360, lon_query)
     
-    # Build KDTree from unstructured grid coordinates
-    grid_points = np.column_stack([lon, lat])
-    
     # Handle potential NaN values in grid
-    valid_grid = ~(np.isnan(grid_points).any(axis=1) | np.isnan(values))
-    grid_points = grid_points[valid_grid]
+    valid_grid = ~(np.isnan(lon) | np.isnan(lat) | np.isnan(values))
+    lon_clean = lon[valid_grid]
+    lat_clean = lat[valid_grid]
     values_clean = values[valid_grid]
     
-    if len(grid_points) == 0:
+    if len(lon_clean) == 0:
         raise ValueError("No valid grid points found after removing NaNs")
     
-    # Build KDTree for fast nearest-neighbor lookup
-    tree = cKDTree(grid_points)
+    # Build tree for fast nearest-neighbor lookup
+    if use_spherical:
+        # Use spherical-aware tree that handles polar regions correctly
+        tree = SphericalKDTree(lon_clean, lat_clean, polar_threshold=polar_threshold)
+    else:
+        # Use fast Cartesian KDTree (may have artifacts at poles)
+        grid_points = np.column_stack([lon_clean, lat_clean])
+        tree = cKDTree(grid_points)
     
     # Initialize output with NaN
     raster_values = np.full(len(lon_query), np.nan)
     
     # Only query valid points
     if np.any(valid_query):
-        query_points = np.column_stack([lon_query[valid_query], lat_query[valid_query]])
+        query_lon_valid = lon_query[valid_query]
+        query_lat_valid = lat_query[valid_query]
         
         if method == 'nearest':
             # Simple nearest neighbor
-            distances, indices = tree.query(query_points, k=1)
+            if use_spherical:
+                distances, indices = tree.query(query_lon_valid, query_lat_valid, k=1)
+            else:
+                query_points = np.column_stack([query_lon_valid, query_lat_valid])
+                distances, indices = tree.query(query_points, k=1)
+            
             raster_values[valid_query] = values_clean[indices]
             
             # Set pixels too far from any grid point to NaN
-            if len(grid_points) > 1:
-                # Estimate grid spacing from first few points
-                sample_size = min(100, len(grid_points))
-                sample_distances, _ = tree.query(grid_points[:sample_size], k=2)
-                typical_spacing = np.median(sample_distances[:, 1]) * 3
+            if len(lon_clean) > 1:
+                # Estimate grid spacing
+                sample_size = min(100, len(lon_clean))
+                sample_indices = np.random.choice(len(lon_clean), sample_size, replace=False)
                 
-                # Create mask for valid distances
-                far_mask = np.full(len(lon_query), False)
-                far_mask[valid_query] = distances > typical_spacing
-                raster_values[far_mask] = np.nan
+                if use_spherical:
+                    sample_lon = lon_clean[sample_indices]
+                    sample_lat = lat_clean[sample_indices]
+                    sample_dists = []
+                    for i in range(min(20, sample_size)):
+                        d = _haversine_distance_matrix(
+                            sample_lon[i], sample_lat[i],
+                            lon_clean, lat_clean
+                        )
+                        sorted_d = np.sort(d)
+                        if len(sorted_d) > 1:
+                            sample_dists.append(sorted_d[1])
+                    typical_spacing = np.median(sample_dists) * 3 if sample_dists else 5.0
+                else:
+                    grid_points = np.column_stack([lon_clean, lat_clean])
+                    sample_distances, _ = tree.query(grid_points[sample_indices], k=2)
+                    typical_spacing = np.median(sample_distances[:, 1]) * 3
+                
+                raster_values[valid_query] = np.where(
+                    distances > typical_spacing,
+                    np.nan,
+                    raster_values[valid_query]
+                )
         
         elif method == 'linear':
             # Inverse distance weighting using k nearest neighbors
-            k = min(4, len(grid_points))
-            distances, indices = tree.query(query_points, k=k)
+            k = min(4, len(lon_clean))
+            
+            if use_spherical:
+                distances, indices = tree.query(query_lon_valid, query_lat_valid, k=k)
+            else:
+                query_points = np.column_stack([query_lon_valid, query_lat_valid])
+                distances, indices = tree.query(query_points, k=k)
             
             # Handle single point case
             if k == 1:
@@ -268,14 +456,33 @@ def to_raster(data, grid, ax, pixel_ratio=1.0, method='nearest'):
                 raster_values[valid_query] = interpolated
                 
                 # Set pixels too far from any grid point to NaN
-                if len(grid_points) > 1:
-                    sample_size = min(100, len(grid_points))
-                    sample_distances, _ = tree.query(grid_points[:sample_size], k=2)
-                    typical_spacing = np.median(sample_distances[:, 1]) * 3
+                if len(lon_clean) > 1:
+                    sample_size = min(100, len(lon_clean))
+                    sample_indices = np.random.choice(len(lon_clean), sample_size, replace=False)
                     
-                    far_mask = np.full(len(lon_query), False)
-                    far_mask[valid_query] = distances[:, 0] > typical_spacing
-                    raster_values[far_mask] = np.nan
+                    if use_spherical:
+                        sample_lon = lon_clean[sample_indices]
+                        sample_lat = lat_clean[sample_indices]
+                        sample_dists = []
+                        for i in range(min(20, sample_size)):
+                            d = _haversine_distance_matrix(
+                                sample_lon[i], sample_lat[i],
+                                lon_clean, lat_clean
+                            )
+                            sorted_d = np.sort(d)
+                            if len(sorted_d) > 1:
+                                sample_dists.append(sorted_d[1])
+                        typical_spacing = np.median(sample_dists) * 3 if sample_dists else 5.0
+                    else:
+                        grid_points = np.column_stack([lon_clean, lat_clean])
+                        sample_distances, _ = tree.query(grid_points[sample_indices], k=2)
+                        typical_spacing = np.median(sample_distances[:, 1]) * 3
+                    
+                    raster_values[valid_query] = np.where(
+                        distances[:, 0] > typical_spacing,
+                        np.nan,
+                        raster_values[valid_query]
+                    )
         
         else:
             raise ValueError(f"Unknown method: {method}. Use 'nearest' or 'linear'")
@@ -287,7 +494,7 @@ def to_raster(data, grid, ax, pixel_ratio=1.0, method='nearest'):
 
 
 def to_raster_with_mask(data, grid, ax, pixel_ratio=1.0, method='nearest', 
-                        mask_value=None):
+                        mask_value=None, use_spherical=True, polar_threshold=60.0):
     """
     Extended version of to_raster with support for masked values.
     
@@ -309,6 +516,10 @@ def to_raster_with_mask(data, grid, ax, pixel_ratio=1.0, method='nearest',
     mask_value : float or None, optional
         Value to mask in the data before rasterization. These values will
         be treated as NaN.
+    use_spherical : bool, optional
+        If True, uses spherical distances for polar regions. Default is True.
+    polar_threshold : float, optional
+        Latitude threshold for spherical distance calculations. Default is 60.0.
     
     Returns
     -------
@@ -318,4 +529,5 @@ def to_raster_with_mask(data, grid, ax, pixel_ratio=1.0, method='nearest',
     if mask_value is not None:
         data = data.where(data != mask_value)
     
-    return to_raster(data, grid, ax, pixel_ratio=pixel_ratio, method=method)
+    return to_raster(data, grid, ax, pixel_ratio=pixel_ratio, method=method,
+                     use_spherical=use_spherical, polar_threshold=polar_threshold)
