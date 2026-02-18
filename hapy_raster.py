@@ -306,9 +306,10 @@ def to_raster(data, grid, ax, pixel_ratio=1.0, method='nearest',
     if hasattr(data, 'chunks') and data.chunks is not None:
         print("Computing Dask array...")
         values = data.compute().values
+        print('done.')
     else:
         values = data.values
-    print('done.')
+
     # Normalize longitude to [-180, 180]
     lon = np.where(lon > 180, lon - 360, lon)
     
