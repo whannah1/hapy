@@ -5,6 +5,7 @@ import numpy as np
 import dask
 import numba
 from scipy.interpolate import interp1d
+from numpy.typing import ArrayLike
 #---------------------------------------------------------------------------------------------------
 # terminal color class
 class tclr:
