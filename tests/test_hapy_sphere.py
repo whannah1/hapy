@@ -13,15 +13,10 @@ import numpy.testing as npt
 import pytest
 import xarray as xr
 
+import hapy_constants
 import hapy_sphere
-from hapy_sphere import lon_to_180, earth_radius, calc_great_circle_distance
-
-# deg_to_rad is defined in hapy_constants but not re-exported through hapy_common;
-# patch it into the module namespace so the functions that depend on it work.
-hapy_sphere.deg_to_rad = np.pi / 180.0
-
-# Re-import after patching so the name is available in function scope too
-from hapy_sphere import find_nearest_neighbors_on_sphere
+hapy_sphere.deg_to_rad = hapy_constants.deg_to_rad  # not re-exported via hapy_common
+from hapy_sphere import lon_to_180, earth_radius, calc_great_circle_distance, find_nearest_neighbors_on_sphere
 
 
 # ---------------------------------------------------------------------------
