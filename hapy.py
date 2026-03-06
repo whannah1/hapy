@@ -10,7 +10,9 @@ from hapy_interp import *
 from hapy_vinth2p import *
 from hapy_raster import *
 #---------------------------------------------------------------------------------------------------
-# misc methods that aren't easily classified
+xr.set_options(use_new_combine_kwarg_defaults=True)
+#---------------------------------------------------------------------------------------------------
+# below are misc methods that aren't easily classified into other files
 #---------------------------------------------------------------------------------------------------
 def trim_png(fig_file,verbose=True,root=None):
     """ use imagemagick to crop white space from png file """

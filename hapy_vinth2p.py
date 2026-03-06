@@ -13,7 +13,7 @@ except ImportError:
         return decorator
     prange = range
 
-
+#---------------------------------------------------------------------------------------------------
 @jit(nopython=True, parallel=True, fastmath=True)
 def _interp_columns_numba(datai_reshaped, p_hybrid_reshaped, datao_reshaped, 
                           plevo, intyp, kxtrp):
@@ -134,7 +134,7 @@ def _interp_columns_numba(datai_reshaped, p_hybrid_reshaped, datao_reshaped,
     
     return datao_reshaped
 
-
+#---------------------------------------------------------------------------------------------------
 def _interp_columns_scipy(datai_reshaped, p_hybrid_reshaped, datao_reshaped, 
                           plevo, intyp, kxtrp):
     """
@@ -203,7 +203,7 @@ def _interp_columns_scipy(datai_reshaped, p_hybrid_reshaped, datao_reshaped,
     
     return datao_reshaped
 
-
+#---------------------------------------------------------------------------------------------------
 def vinth2p(datai, hbcofa, hbcofb, plevo, psfc, intyp, p0, ii, kxtrp, use_numba=True):
     """
     Interpolates data on hybrid coordinates to pressure levels.
@@ -320,13 +320,13 @@ def vinth2p(datai, hbcofa, hbcofb, plevo, psfc, intyp, p0, ii, kxtrp, use_numba=
         
         # Handle hybrid coefficients - remove redundant time dimension if present
         if isinstance(hbcofa, xr.DataArray):
-            if 'time' in hbcofa.dims and hbcofa.dims[0] == 'time':
+            if 'time' in hbcofa.dims: #and hbcofa.dims[0] == 'time':
                 # Select first time step to drop time dimension
                 hbcofa = hbcofa.isel(time=0)
             hbcofa = hbcofa.values
         
         if isinstance(hbcofb, xr.DataArray):
-            if 'time' in hbcofb.dims and hbcofb.dims[0] == 'time':
+            if 'time' in hbcofb.dims: #and hbcofb.dims[0] == 'time':
                 # Select first time step to drop time dimension
                 hbcofb = hbcofb.isel(time=0)
             hbcofb = hbcofb.values
@@ -339,8 +339,8 @@ def vinth2p(datai, hbcofa, hbcofb, plevo, psfc, intyp, p0, ii, kxtrp, use_numba=
     # Convert inputs to numpy arrays (handles dask arrays)
     try:
         # If dask array, compute it
-        if hasattr(datai,  'compute'): datai = datai.compute()
-        if hasattr(psfc,   'compute'): psfc = psfc.compute()
+        if hasattr(datai,  'compute'): datai  = datai.compute()
+        if hasattr(psfc,   'compute'): psfc   = psfc.compute()
         if hasattr(hbcofa, 'compute'): hbcofa = hbcofa.compute()
         if hasattr(hbcofb, 'compute'): hbcofb = hbcofb.compute()
     except:
@@ -521,7 +521,7 @@ def vinth2p(datai, hbcofa, hbcofb, plevo, psfc, intyp, p0, ii, kxtrp, use_numba=
     
     return datao
 
-
+#---------------------------------------------------------------------------------------------------
 def vinth2p_simple(datai, hbcofa, hbcofb, plevo, psfc, p0=100000.0, 
                    interp_type='log', extrapolate=False, use_numba=True):
     """
@@ -593,7 +593,7 @@ def vinth2p_simple(datai, hbcofa, hbcofb, plevo, psfc, p0=100000.0,
     return vinth2p(datai, hbcofa, hbcofb, plevo, psfc, intyp, p0, None, 
                    extrapolate, use_numba=use_numba)
 
-
+#---------------------------------------------------------------------------------------------------
 if __name__ == "__main__":
     import time
     
@@ -755,3 +755,4 @@ if __name__ == "__main__":
         print(f"Numba time:  {time_numba:.3f} s")
         print(f"Scipy time:  {time_scipy:.3f} s")
         print(f"Speedup:     {time_scipy/time_numba:.1f}x")
+#---------------------------------------------------------------------------------------------------

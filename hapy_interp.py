@@ -145,6 +145,10 @@ def interp_to_height(
     # ------------------------------------------------------------------
     out = out_flat.reshape(*col_shape, n_heights) if col_shape else out_flat.reshape(n_heights)
 
+    # Move the height axis (currently last) back to the original lev position
+    if col_shape:
+        out = np.moveaxis(out, -1, lev_ax)
+
     # ------------------------------------------------------------------
     # 6. Rebuild DataArray with correct dims/coords.
     # ------------------------------------------------------------------

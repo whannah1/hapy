@@ -152,4 +152,17 @@ def calc_great_circle_distance(lat1,lat2,lon1,lon2):
 #     area = totype( a1+b1+c1 ,typeof(lat1))
 #     return area
 #---------------------------------------------------------------------------------------------------
-
+# @numba.jit(nopython=True)
+def calculate_area_from_latlon(lon,lat,lon_bnds,lat_bnds):
+    re = 6.37122e06  # radius of earth
+    nlat,nlon = len(lat),len(lon)
+    area = np.empty((nlat,nlon),np.float64)
+    for j in range(nlat):
+        for i in range(nlon):
+            dlon = np.absolute( lon_bnds[j,1] - lon_bnds[j,0] )
+            dlat = np.absolute( lat_bnds[j,1] - lat_bnds[j,0] )
+            dx = re*dlon*np.pi/180.
+            dy = re*dlat*np.pi/180.
+            area[j,i] = dx*dy
+    return area
+#---------------------------------------------------------------------------------------------------
