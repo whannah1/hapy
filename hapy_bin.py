@@ -9,7 +9,7 @@ def bin_YbyX (Vy,Vx,bins=[],bin_min=0,bin_max=1,bin_spc=1,bin_spc_log=20,nbin_lo
     Manual mode takes an array bin center values and determines thebin spacings. 
     Explicit mode takes a list of bin edge values, which is useful for an 
     irregularly spacing, such as logarithmic.  """
-    #----------------------------------------------------------------------------
+    #---------------------------------------------------------------------------
     # Manual mode - use min, max, and spc (i.e. stride) to define bins
     if bin_mode == "manual":
         # bins = np.arange(bin_min, bin_max+bin_spc, bin_spc)
@@ -17,13 +17,13 @@ def bin_YbyX (Vy,Vx,bins=[],bin_min=0,bin_max=1,bin_spc=1,bin_spc_log=20,nbin_lo
         nbin    = np.round( ( bin_max - bin_min + bin_spc )/bin_spc ).astype(int)
         bins    = np.linspace(bin_min,bin_max,nbin)
         bin_coord = xr.DataArray( bins )
-    #----------------------------------------------------------------------------
+    #---------------------------------------------------------------------------
     # Explicit mode - requires explicitly defined bin edges
     if bin_mode == "explicit":
         bins = xr.DataArray( bins )   # convert the input to a DataArray
         nbin = len(bins)-1
         bin_coord = ( bins[0:nbin-1+1] + bins[1:nbin+1] ) /2.
-    #----------------------------------------------------------------------------
+    #---------------------------------------------------------------------------
     # Log mode - logarithmically spaced bins that increase in width by bin_spc_log [%]
     if bin_mode == "log":
         bin_log_wid = np.zeros(nbin_log)
@@ -37,7 +37,7 @@ def bin_YbyX (Vy,Vx,bins=[],bin_min=0,bin_max=1,bin_spc=1,bin_spc_log=20,nbin_lo
         bin_coord = xr.DataArray( bin_log_ctr )
         ### Print coords
         # for b in bin_coord.values : print( '{0:8.2f}'.format(b) )
-    #----------------------------------------------------------------------------
+    #---------------------------------------------------------------------------
     # create output data arrays
     nlev  = len(Vy['lev'])  if 'lev'  in Vy.dims else 1
     ntime = len(Vy['time']) if 'time' in Vy.dims else 1
@@ -52,20 +52,23 @@ def bin_YbyX (Vy,Vx,bins=[],bin_min=0,bin_max=1,bin_spc=1,bin_spc_log=20,nbin_lo
         dims = ['bin','lev']   
     if nlev==1 and not keep_lev and not keep_time :
         shape,dims,coord = (nbin,),'bin',[('bin', bin_coord.values)]
-    # if nlev>1 and keep_time==True :
-    #    coord = [ ('bin', bin_coord), ('time', Vy['time']), ('lev', Vy['lev']) ]
-    #    shape = (nbin,ntime,nlev)
-    #    dims = ['bin','time','lev']   
     if nlev==1 and keep_time==True :
         coord = [('bin', bin_coord.values), ('time', Vy['time'].values)]
         shape = (nbin,ntime)
         dims = ['bin','time']
-    
+    #---------------------------------------------------------------------------
+    print()
+    print(f'  shape: {shape}')
+    print(f'  dtype: {Vy.dtype}')
+    print(f'  coord: {coord}')
+    print(f'  dims : {dims}')
+    print()
+    #---------------------------------------------------------------------------
     mval = np.nan
     bin_val = xr.DataArray( np.full(shape,mval,dtype=Vy.dtype), coords=coord, dims=dims )
     bin_std = xr.DataArray( np.full(shape,mval,dtype=Vy.dtype), coords=coord, dims=dims )
     bin_cnt = xr.DataArray( np.zeros(shape,dtype=Vy.dtype), coords=coord, dims=dims )
-    #----------------------------------------------------------------------------
+    #---------------------------------------------------------------------------
     # set up wgts
     # if wgt==[]: wgt, *__ = xr.broadcast(np.ones( Vy.shape[0] ), Vy)
     # if wgt is None: wgt = np.ones( Vy.shape )
@@ -73,18 +76,9 @@ def bin_YbyX (Vy,Vx,bins=[],bin_min=0,bin_max=1,bin_spc=1,bin_spc_log=20,nbin_lo
     #    wgt = np.ones( Vy.shape )
     # else:
     #    wgt = np.ma.masked_array( wgt, condition)
-
+    #---------------------------------------------------------------------------
     lev_chk=False
     if 'lev' in Vy.dims and len(Vy.lev)>1 and keep_lev : lev_chk = True
-
-    # if 'lev' in Vy.dims : 
-    #    if len(Vy.lev)>1 : 
-    #       lev_chk = True
-    #    else:
-    #       print("!!!!!!!!!")
-    # else:
-    #    lev_chk=False
-
     if lev_chk :
         avg_dims = ['ncol']
         if 'time' in Vy.dims : avg_dims = ['time','ncol']
@@ -94,10 +88,10 @@ def bin_YbyX (Vy,Vx,bins=[],bin_min=0,bin_max=1,bin_spc=1,bin_spc_log=20,nbin_lo
             #    avg_dims_wgt = ['time','ncol']
             # else:
             #    avg_dims_wgt = ['ncol']
-
+    #---------------------------------------------------------------------------
     val_chk = np.isfinite(Vx.values)
-
     use_masked_arrays = False
+    #---------------------------------------------------------------------------
     # if dask.is_dask_collection(Vy) and not lev_chk:
     #    # use masked array method to avoid numpy division warnings on dask arrays
     #    use_masked_arrays = True
@@ -106,13 +100,12 @@ def bin_YbyX (Vy,Vx,bins=[],bin_min=0,bin_max=1,bin_spc=1,bin_spc_log=20,nbin_lo
     #    Vx_tmp = Vx.load().data
     #    Vy_tmp = np.ma.masked_array( np.where(Vy_tmp,Vy_tmp,-999), mask)
     #    Vx_tmp = np.ma.masked_array( np.where(Vx_tmp,Vx_tmp,-999), mask)
-
+    #---------------------------------------------------------------------------
     if keep_time and 'time' in Vy.dims:
         if wgt.dims != Vy.dims : 
             wgt, *__ = xr.broadcast(wgt, Vy) 
             wgt = wgt.transpose('time','ncol')
-
-    #----------------------------------------------------------------------------
+    #---------------------------------------------------------------------------
     # Loop through bins
     for b in range(nbin):
         if bin_mode == "manual":
@@ -128,7 +121,7 @@ def bin_YbyX (Vy,Vx,bins=[],bin_min=0,bin_max=1,bin_spc=1,bin_spc_log=20,nbin_lo
         condition = xr.DataArray( np.full(Vx.shape,False,dtype=bool), coords=Vx.coords )
         condition.values = ( np.where(val_chk,Vx.values,bin_bot-1e3) >=bin_bot ) \
                                 &( np.where(val_chk,Vx.values,bin_bot-1e3)  <bin_top )
-
+        #-----------------------------------------------------------------------
         # print(); print(condition)
         # tmp_data = Vx.where(condition,drop=True)
         # tmp_data = wgt.where(condition,drop=True)
@@ -138,7 +131,7 @@ def bin_YbyX (Vy,Vx,bins=[],bin_min=0,bin_max=1,bin_spc=1,bin_spc_log=20,nbin_lo
         # print(); print(tmp_data.sum().values)
         # exit()
         # print(f' bot: {bin_bot} cnt: {np.sum(condition.values)}')
-
+        #-----------------------------------------------------------------------
         if np.sum(condition.values)>0 :
             if lev_chk :
                 ### xarray method
@@ -159,12 +152,13 @@ def bin_YbyX (Vy,Vx,bins=[],bin_min=0,bin_max=1,bin_spc=1,bin_spc_log=20,nbin_lo
                                                   / wgt.where(condition,drop=True).sum( dim='ncol', skipna=True ) )
                 bin_std[b,:] = Vy.where(condition,drop=True).std(  dim=avg_dims, skipna=True )
                 bin_cnt[b,:] = Vy.where(condition,drop=True).count(dim=avg_dims)
-
+                #---------------------------------------------------------------
                 ### masked array method - Not sure how to make this work with a lev dimension...
                 # bin_val[b,:] = np.sum( np.where(condition, Vy_tmp*wgt, 0 ) ) / np.sum( np.where(condition, wgt, 0 ) )
                 # bin_val[b,:] = bin_val[b,:] / wgt.where(condition,drop=True).sum( dim=['time','ncol'])
                 # bin_std[b,:] = np.where(condition, np.std( Vy_tmp ) )
                 # bin_cnt[b,:] = np.sum( condition )
+                #---------------------------------------------------------------
             elif keep_time and 'time' in Vy.dims:
                 # avg_dims = ['ncol']
                 # if wgt.dims != Vy.dims : 
@@ -213,11 +207,11 @@ def bin_YbyX (Vy,Vx,bins=[],bin_min=0,bin_max=1,bin_spc=1,bin_spc_log=20,nbin_lo
                 
         # print('b: '+str(b)+'  cnt: '+str(bin_cnt[b])+'  val: '+str(bin_val[b]))
         if not lev_chk and verbose : print('b: {0:8.0f}  cnt: {1:8.0f}  val: {2:12.4e} '.format( b, bin_cnt[b].values, bin_val[b].values ) )
-    #----------------------------------------------------------------------------
+    #---------------------------------------------------------------------------
     ### add mask (doesn't propagate to xarray?)
     # bin_val = np.ma.masked_invalid(bin_val)
     # bin_std = np.ma.masked_invalid(bin_std)
-    #----------------------------------------------------------------------------
+    #---------------------------------------------------------------------------
     
     # use a dataset to hold all the output
     dims = ('bins',)
@@ -233,7 +227,7 @@ def bin_YbyX (Vy,Vx,bins=[],bin_min=0,bin_max=1,bin_spc=1,bin_spc_log=20,nbin_lo
     bin_ds.coords['bins'] = bin_coord
     if lev_chk : bin_ds.coords['lev'] = xr.DataArray(Vy['lev'])
 
-    #----------------------------------------------------------------------------
+    #---------------------------------------------------------------------------
     return bin_ds
 #-------------------------------------------------------------------------------
 def bin_ZbyYX (Vz,Vy,Vx,binsy,binsx,opt):

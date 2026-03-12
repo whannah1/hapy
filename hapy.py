@@ -26,40 +26,89 @@ def trim_png(fig_file,verbose=True,root=None):
     else:
         raise FileNotFoundError(f'\ntrim_png(): {fig_file} does not exist?!\n')
 #---------------------------------------------------------------------------------------------------
-def print_time_length(time,indent='    ',print_msg=True,color=None,
-                             print_span=True, print_length=True):
-    """ print length of time """
-    if len(time)<=1: return
-    max_dy_for_mn = np.timedelta64(60, 'D')
-    max_mn_for_yr = np.timedelta64(12, 'M')
-    # calculate time delta
-    dt = time[1] - time[0]
-    # calculate length of period spanned by coordinate
-    time_span_dy = ( time[-1] - time[0] + dt ).values.astype('timedelta64[D]') 
-    time_span_mn = time_span_dy.astype('timedelta64[M]') + 1
-    time_span_yr = time_span_mn.astype('timedelta64[Y]') + 1
-    # calculate the actual length of the data (considering gaps with no data)
-    time_leng_dy = (len(time) * dt).values.astype('timedelta64[D]') 
-    time_leng_mn = time_leng_dy.astype('timedelta64[M]') + 1
-    time_leng_yr = time_leng_mn.astype('timedelta64[Y]') + 1
-    # build a message to be printed
-    msg1 = indent+f'Time span   : {str(time_span_dy)}'
-    msg2 = indent+f'Time length : {str(time_leng_dy)}'
-    if time_span_dy > max_dy_for_mn : msg1 = msg1+f'  /  {time_span_mn}'
-    if time_leng_dy > max_dy_for_mn : msg2 = msg2+f'  /  {time_leng_mn}'
-    if time_span_mn > max_mn_for_yr : msg1 = msg1+f'  /  {time_span_yr}'
-    if time_leng_mn > max_mn_for_yr : msg2 = msg2+f'  /  {time_leng_yr}'
-    # add color if requested
-    if color is not None:
-        msg1 = f'{color}{msg1}{tcolor.ENDC}'
-        msg2 = f'{color}{msg2}{tcolor.ENDC}'
-    # print the formatted message
-    if print_msg:
-        if print_span:    print(msg1)
-        if print_length:  print(msg2)
-        return
+def print_time_length(ds_or_time, indent='    ', print_msg=True, color=None):
+    """
+    Print (or return) a string describing the temporal extent of a dataset or time coordinate.
+
+    Parameters
+    ----------
+    ds_or_time : xr.Dataset, xr.DataArray, or time-coordinate DataArray
+        If a Dataset is passed, time bounds variables (time_bnds, time_bounds, time_bnd)
+        are used when available for accurate span calculation regardless of E3SM
+        end-of-period time conventions. A bare time coordinate DataArray is also accepted.
+    indent : str
+        Prefix string for the printed line.
+    print_msg : bool
+        If True, print the message and return None. If False, return the message string.
+    color : str or None
+        ANSI escape code string to wrap the message in (e.g. tclr.RED). tclr.END is
+        appended automatically.
+    """
+    #----------------------------------------------------------------------------
+    # extract time coordinate and optional bounds from input
+    time_bnds_da = None
+    if isinstance(ds_or_time, xr.Dataset):
+        ds = ds_or_time
+        if 'time' not in ds.coords and 'time' not in ds.dims:
+            msg = indent + 'Time span   : no time dimension'
+            if color is not None: msg = f'{color}{msg}{tclr.END}'
+            if print_msg: print(msg); return
+            return msg
+        time = ds['time']
+        for bname in ('time_bnds', 'time_bounds', 'time_bnd'):
+            if bname in ds:
+                time_bnds_da = ds[bname]
+                break
+    elif isinstance(ds_or_time, xr.DataArray):
+        da = ds_or_time
+        if 'time' in da.coords and da.name != 'time':
+            time = da['time']
+        elif np.issubdtype(da.dtype, np.datetime64):
+            time = da
+        else:
+            msg = indent + 'Time span   : no time dimension'
+            if color is not None: msg = f'{color}{msg}{tclr.END}'
+            if print_msg: print(msg); return
+            return msg
     else:
+        msg = indent + 'Time span   : no time dimension'
+        if color is not None: msg = f'{color}{msg}{tclr.END}'
+        if print_msg: print(msg); return
         return msg
+    #----------------------------------------------------------------------------
+    # helper: format a timedelta64[D] into a multi-unit human-readable string
+    def _fmt_td(td_dy):
+        s = str(td_dy)
+        mn = td_dy.astype('timedelta64[M]')
+        yr = mn.astype('timedelta64[Y]')
+        if mn >= np.timedelta64(2, 'M'):
+            s += f'  /  {mn}'
+        if yr >= np.timedelta64(2, 'Y'):
+            s += f'  /  {yr}'
+        return s
+    #----------------------------------------------------------------------------
+    # handle single time value
+    if len(time) <= 1:
+        if time_bnds_da is not None and len(time_bnds_da) >= 1:
+            span_dy = (time_bnds_da[0, 1] - time_bnds_da[0, 0]).values.astype('timedelta64[D]')
+            msg = indent + f'Time span   : {_fmt_td(span_dy)}  (single period, from time_bnds)'
+        else:
+            msg = indent + 'Time span   : single time value, no bounds available'
+        if color is not None: msg = f'{color}{msg}{tclr.END}'
+        if print_msg: print(msg); return
+        return msg
+    #----------------------------------------------------------------------------
+    # compute span: prefer bounds if available, otherwise fall back to arithmetic
+    if time_bnds_da is not None:
+        span_dy = (time_bnds_da[-1, 1] - time_bnds_da[0, 0]).values.astype('timedelta64[D]')
+        msg = indent + f'Time span   : {_fmt_td(span_dy)}  (from time_bnds)'
+    else:
+        dt = time[1] - time[0]
+        span_dy = (time[-1] - time[0] + dt).values.astype('timedelta64[D]')
+        msg = indent + f'Time span   : {_fmt_td(span_dy)}'
+    if color is not None: msg = f'{color}{msg}{tclr.END}'
+    if print_msg: print(msg); return
+    return msg
 
 #---------------------------------------------------------------------------------------------------
 def check_invalid_values(uxds, variables=None, check_nan=True, check_inf=True, 
