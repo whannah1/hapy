@@ -62,6 +62,14 @@ def bin_YbyX(Vy, Vx, bins=[], bin_min=0, bin_max=1, bin_spc=1, bin_spc_log=20, n
             has_time = True
             time_name = d
     #----------------------------------------------------------------------------
+    # identify the horizontal/spatial dimensions to collapse during binning
+    # (unstructured model data uses 'ncol'; lat/lon data uses both 'lat' and 'lon')
+    valid_horz_dims = ['ncol','lat','lon']
+    horz_dims = [d for d in valid_horz_dims if d in Vy.dims]
+    if not horz_dims:
+        raise ValueError(f"No horizontal dimension found in Vy.dims={list(Vy.dims)}. "
+                         f"Expected one of {valid_horz_dims}.")
+    #----------------------------------------------------------------------------
 
     nvert = len(Vy[vert_name]) if has_vert else 1
     ntime = len(Vy[time_name]) if has_time else 1
@@ -102,10 +110,10 @@ def bin_YbyX(Vy, Vx, bins=[], bin_min=0, bin_max=1, bin_spc=1, bin_spc_log=20, n
         # Step 2: Does the data also have a time dimension?
         if has_time:
             # Average over both time and horizontal columns
-            avg_dims = [time_name, 'ncol']
+            avg_dims = [time_name] + horz_dims
         else:
             # Average over horizontal columns only
-            avg_dims = ['ncol']
+            avg_dims = horz_dims
     else:
         # No level dimension — averaging dims are not applicable
         avg_dims = None
@@ -126,8 +134,8 @@ def bin_YbyX(Vy, Vx, bins=[], bin_min=0, bin_max=1, bin_spc=1, bin_spc_log=20, n
             if wgt is None:
                 bin_val[b, :] = Vy.where(condition, drop=True).mean(dim=avg_dims, skipna=True)
             else:
-                weighted = ( (Vy*wgt).where(condition, drop=True).sum(dim='ncol', skipna=True)
-                            /    wgt .where(condition, drop=True).sum(dim='ncol', skipna=True) )
+                weighted = ( (Vy*wgt).where(condition, drop=True).sum(dim=horz_dims, skipna=True)
+                            /    wgt .where(condition, drop=True).sum(dim=horz_dims, skipna=True) )
                 if time_name in Vy.dims:
                     weighted = weighted.mean(dim=time_name, skipna=True)
                 bin_val[b, :] = weighted
@@ -135,8 +143,8 @@ def bin_YbyX(Vy, Vx, bins=[], bin_min=0, bin_max=1, bin_spc=1, bin_spc_log=20, n
             bin_cnt[b, :] = Vy.where(condition, drop=True).count(dim=avg_dims)
         #-----------------------------------------------------------------------
         elif keep_time and time_name in Vy.dims:
-            bin_val[b, :] = ( (Vy*wgt).where(condition, drop=True).sum(dim='ncol', skipna=True)
-                             /    wgt .where(condition, drop=True).sum(dim='ncol', skipna=True) )
+            bin_val[b, :] = ( (Vy*wgt).where(condition, drop=True).sum(dim=horz_dims, skipna=True)
+                             /    wgt .where(condition, drop=True).sum(dim=horz_dims, skipna=True) )
             bin_cnt[b]    = condition.values.sum()
         #-----------------------------------------------------------------------
         else:

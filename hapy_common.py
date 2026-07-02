@@ -6,6 +6,7 @@ import dask
 import numba
 from scipy.interpolate import interp1d
 from numpy.typing import ArrayLike
+import matplotlib.colors as mcolors
 #---------------------------------------------------------------------------------------------------
 # terminal color class
 class tclr:

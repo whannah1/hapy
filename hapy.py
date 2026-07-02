@@ -242,4 +242,68 @@ def calc_dp3d(ps,lev):
     return dp3d
 
 #---------------------------------------------------------------------------------------------------
+# helper functions for plot customization
+#---------------------------------------------------------------------------------------------------
+# Assign unique colors to any grid that didn't specify one
+def _gen_unique_colors(n_colors, hue_min=0.0, hue_max=0.8):
+    """Return n visually distinct colors using HSV spacing.
+    0.0 = red, 0.17 = yellow, 0.33 = green, 0.5 = cyan, 0.67 = blue, 0.83 = magenta, 1.0 = red
+    """
+    output_rgb = []
+    for i in range(n_colors):
+        hue = hue_min + (i / n_colors) * (hue_max - hue_min)
+        # hue = i / n_colors
+        sat = 1.0 # 0.85
+        val = 1.0 # 0.80
+        output_rgb.append( mcolors.hsv_to_rgb((hue, sat, val)) )
+    return output_rgb
+# def _gen_unique_colors(n_colors):
+#     """Return n visually distinct colors using HSV spacing."""
+#     return [ mcolors.hsv_to_rgb((i / n_colors, 0.85, 0.80))  ]
+#---------------------------------------------------------------------------------------------------
+def fill_color_list(clr, cmap=None):
+    # --------------------------------------------------------------------------------
+    # Determine which indices need colors assigned
+    _uncolored = None
+    if isinstance(clr, dict):
+        _uncolored = [i for i, o in enumerate(opt_list) if 'c' not in o]
+    if isinstance(clr, list):
+        _uncolored = [i for i, c in enumerate(clr) if not c]
+    if _uncolored is None:
+        raise ValueError('ERROR - fill_color_list() - _uncolored cannot be None')
+
+    # --------------------------------------------------------------------------------
+    # Generate colors from a colormap or fall back to the default unique color generator
+    n = len(_uncolored)
+    if cmap is not None:
+        import numpy as np
+        import matplotlib.pyplot as plt
+        _cmap = plt.get_cmap(cmap)
+        _palette = [_cmap(v) for v in np.linspace(0, 1, n)]
+    else:
+        _palette = _gen_unique_colors(n)
+
+    # --------------------------------------------------------------------------------
+    # Assign generated colors to uncolored slots
+    for idx, palette_color in zip(_uncolored, _palette):
+        clr[idx] = palette_color
+
+    return clr
+#---------------------------------------------------------------------------------------------------
+# Map PyNGL integer dash indices to matplotlib linestyle strings
+_dash_map = {0: 'solid', 1: 'dashed', 2: 'dotted', 3: 'dashdot'}
+def dash_to_ls(dsh):
+    if isinstance(dsh, list):
+        return [ _dash_map.get(d, 'solid') for d in dsh ]
+    else:
+        return _dash_map.get(dsh, 'solid')
+#---------------------------------------------------------------------------------------------------
+# Ensure contour levels are strictly increasing (guard against degenerate data)
+def ensure_increasing(levels):
+    levels = np.asarray(levels, dtype=float)
+    if levels.size < 2 or not np.all(np.diff(levels) > 0):
+        center = float(levels.flat[0]) if levels.size else 0.0
+        span   = abs(center) if center != 0 else 1.0
+        levels = np.linspace(center - span, center + span, 21)
+    return levels
 #---------------------------------------------------------------------------------------------------
