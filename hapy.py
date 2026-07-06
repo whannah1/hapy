@@ -7,6 +7,7 @@ from hapy_sat import *
 from hapy_filter import *
 from hapy_bin import *
 from hapy_interp import *
+from hapy_cape import *
 from hapy_vinth2p import *
 from hapy_raster import *
 #---------------------------------------------------------------------------------------------------
