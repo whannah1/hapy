@@ -172,7 +172,7 @@ class SphericalKDTree:
 
 
 def to_raster(data, grid, ax, pixel_ratio=1.0, method='nearest', 
-              use_spherical=True, polar_threshold=60.0):
+              use_spherical=True, polar_threshold=60.0, verbose=False):
     """
     Convert unstructured grid data to a raster array for plotting.
     
@@ -283,7 +283,7 @@ def to_raster(data, grid, ax, pixel_ratio=1.0, method='nearest',
         if not data_vars:
             raise ValueError("Dataset contains no data variables")
         data = data[data_vars[0]]
-        print(f"Note: Using data variable '{data_vars[0]}' from Dataset")
+        if verbose: print(f"Note: Using data variable '{data_vars[0]}' from Dataset")
     
     # Verify data has required structure
     if 'ncol' not in data.dims:
@@ -304,9 +304,9 @@ def to_raster(data, grid, ax, pixel_ratio=1.0, method='nearest',
     
     # Compute data if it's a Dask array
     if hasattr(data, 'chunks') and data.chunks is not None:
-        print("Computing Dask array...")
+        if verbose: print("Computing Dask array...")
         values = data.compute().values
-        print('done.')
+        if verbose: print('done.')
     else:
         values = data.values
 
@@ -356,8 +356,8 @@ def to_raster(data, grid, ax, pixel_ratio=1.0, method='nearest',
         lon_query = points_geo[:, 0]
         lat_query = points_geo[:, 1]
     except Exception as e:
-        print(f"Warning: Transform failed with error: {e}")
-        print("Falling back to direct coordinate usage")
+        if verbose: print(f"Warning: Transform failed with error: {e}")
+        if verbose: print("Falling back to direct coordinate usage")
         lon_query = x_proj_flat
         lat_query = y_proj_flat
     
