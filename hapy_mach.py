@@ -30,5 +30,6 @@ def get_host(verbose=False):
     if host=='olcf.ornl.gov': host = 'olcf'   # andes
     if host=='lcrc.anl.gov' : host = 'lcrc'    # chrysalis
     if 'aurora.alcf' in host: host = 'alcf'
+    if host=='llnl.gov'     : host = 'llnl'
     return host
 #---------------------------------------------------------------------------------------------------
