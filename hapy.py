@@ -262,7 +262,7 @@ def _gen_unique_colors(n_colors, hue_min=0.0, hue_max=0.8):
 #     """Return n visually distinct colors using HSV spacing."""
 #     return [ mcolors.hsv_to_rgb((i / n_colors, 0.85, 0.80))  ]
 #---------------------------------------------------------------------------------------------------
-def fill_color_list(clr, cmap=None):
+def fill_color_list(clr, cmap=None, randomize=False):
     # --------------------------------------------------------------------------------
     # Determine which indices need colors assigned
     _uncolored = None
@@ -283,6 +283,13 @@ def fill_color_list(clr, cmap=None):
         _palette = [_cmap(v) for v in np.linspace(0, 1, n)]
     else:
         _palette = _gen_unique_colors(n)
+
+    # --------------------------------------------------------------------------------
+    # Optionally shuffle the palette so colors are assigned in random order
+    if randomize:
+        import random
+        _palette = list(_palette)
+        random.shuffle(_palette)
 
     # --------------------------------------------------------------------------------
     # Assign generated colors to uncolored slots
