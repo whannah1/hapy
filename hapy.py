@@ -315,3 +315,22 @@ def ensure_increasing(levels):
         levels = np.linspace(center - span, center + span, 21)
     return levels
 #---------------------------------------------------------------------------------------------------
+def olr_to_tb(olr):
+    """
+    Convert outgoing longwave radiation to IR window brightness temperature.
+    Uses the inverse of the Ohring et al. (1984) empirical relation, following
+    Yang and Slingo (2001). Works on scalars, numpy arrays, or xarray objects.
+    Parameters
+    ----------
+    olr : float, array-like, or xarray.DataArray - Outgoing longwave radiation [W/m2]
+    Returns
+    -------
+    tb : same type as input - Brightness temperature [K]
+    """
+    a = 1.228
+    b = -1.106e-3
+    sigma = 5.67e-8
+    tf = (olr / sigma) ** 0.25
+    tb = (-a + np.sqrt(a**2 + 4.0 * b * tf)) / (2.0 * b)
+    return tb
+#---------------------------------------------------------------------------------------------------
