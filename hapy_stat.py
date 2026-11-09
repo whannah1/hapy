@@ -1,7 +1,7 @@
 from hapy_common import *
 #---------------------------------------------------------------------------------------------------
 def print_stat(x,name='(no name)',unit='',fmt='f',stat='naxh',indent=' '*2,compact=True):
-    """ Print min, avg, max, and std deviation of input """
+    """ Print min, avg, max, std deviation, and RMS of input """
     if fmt=='f' : fmt = '%.4f'
     if fmt=='e' : fmt = '%e'
     if fmt=='g' : fmt = '%g'
@@ -18,6 +18,7 @@ def print_stat(x,name='(no name)',unit='',fmt='f',stat='naxh',indent=' '*2,compa
         if c=='n' : line += '   min: '+fmt%x.min()
         if c=='x' : line += '   max: '+fmt%x.max()
         if c=='s' : line += '   std: '+fmt%x.std()
+        if c=='r' : line += '   rms: '+fmt%np.sqrt((x**2).mean())
         # if not compact: print(line)
         if not compact: msg += line+'\n'
     # if compact: print(line)
