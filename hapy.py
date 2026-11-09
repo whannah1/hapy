@@ -10,6 +10,7 @@ from hapy_interp import *
 from hapy_cape import *
 from hapy_vinth2p import *
 from hapy_raster import *
+from hapy_waves import *
 #---------------------------------------------------------------------------------------------------
 xr.set_options(use_new_combine_kwarg_defaults=True)
 #---------------------------------------------------------------------------------------------------
